@@ -1,0 +1,362 @@
+---
+PROGRAM         :  CV2109_prelim_analyses.R
+STUDY           :  CORL - CV2019
+PROJECT         :  CV2109.Rproj 
+DESCRIPTION     : 
+INPUTS          :  
+OUTPUTS         :  
+DATE CREATED    :  11 AUG 2021
+COMPLETED       :  No
+AUTHOR          :  MZ ( mizuidema at indiana dot edu ) 
+ 
+REVSIONS: 
+
+INITS           MOD_NUM     DATE              REASON
+   MZ           001         11-Aug-2021       Added blah blah
+                002                           Revised blah blah   
+   MZ           003         12-Aug-2021       Unified test/control color scheme
+---
+
+
+```{r}
+#################################################################################################################
+####################################          LIBRARIES & FUNCTIONS           ###################################
+#################################################################################################################
+library(dplyr)
+library(tidyr)
+library(scales)
+library(stringr)
+library(ggplot2)
+library(Hmisc)
+library(dplyr)
+library(GGally)
+
+# install.packages('Hmisc')
+```
+
+```{r}
+#################################################################################################################
+###################################       READING IN DATA & VARIABLES         ###################################
+#################################################################################################################
+
+#Setting the working directory
+setwd("C:/Users/mzuid/OneDrive - Indiana University/CORL/Cooper/CV2109")
+
+#Reading in the raw data, labels, and factor levels 
+source("CV2109_R_2021-07-28_1048.r")
+
+# source("CV2109_R_2021-08-11_1027.r")
+
+```
+
+```{r}
+#################################################################################################################
+####################################             PLOT OBJECTS                ####################################
+#################################################################################################################
+mytheme <-  theme(plot.title = element_text(size=16,face="bold",hjust=.5),
+                  legend.title = element_blank(),
+                  legend.position = "none",
+                  legend.text = element_text(size=11),
+                  axis.text = element_text(size=12,color="black"),
+                  axis.title = element_text(size=12,face="bold"))
+
+mytheme_legend <-  theme(plot.title = element_text(size=16,face="bold",hjust=.5),
+                         legend.title = element_blank(),
+                         legend.text = element_text(size=11),
+                         axis.text = element_text(size=12,color="black"),
+                         axis.title = element_text(size=12,face="bold"))
+
+#scale y continuous (%)
+scale_y_continuous_percentage100 <- scale_y_continuous(limits=c(0,1),name = "Percentage", breaks=c(0,.25,.5,.75,1),labels=c("0%","25%","50%","75%","100%"))
+
+scale_y_continuous_percentage110 <- scale_y_continuous(limits=c(0,1.1),name = "Percentage", breaks=c(0,.25,.5,.75,1),labels=c("0%","25%","50%","75%","100%"))
+
+#scale y continuous
+scale_y_continuous_100 <- scale_y_continuous(limits=c(0,100), breaks=c(0,25,50,75,100),labels=c("0","25","50","75","100"))
+
+scale_y_continuous_110 <- scale_y_continuous(limits=c(0,110), breaks=c(0,25,50,75,100),labels=c("0","25","50","75","100"))
+
+
+#Color Palette
+Palette_2 <- c("#35A962", "#1d5290")
+Palette_Agree <- c("#2f9657","#79B38F","#a9a9a9","#6D87A6","#1a4981")
+Palette_5 <- c("#a9a9a9","#2f9657","#79B38F","#6D87A6","#1a4981")
+Palette_4 <- c("#2f9657","#79B38F","#6D87A6","#1a4981")
+```
+
+```{r}
+#################################################################################################################
+###################################             CHECK DUPLICATES              ###################################
+#################################################################################################################
+
+# NEED MORE INFORMATION
+
+dup_test <- data[,2:623]
+
+dup_test$test_id <- substr(data$entry_subj_id, 0, 4)
+
+duplicated(dup_test[c('test_id','redcap_event_name')])
+```
+
+```{r}
+#################################################################################################################
+####################################           CLEANING THE DATA              ###################################
+#################################################################################################################
+
+# Create RANDOMIZED_PAIR variable
+# ---indicates whether subject received 1st or 2nd lens (i.e., Visits 1-3 or Visits 4-6)
+data <- data %>%
+  mutate(randomized_pair = case_when(grepl(paste(c('pair_1','p1'), collapse = '|'), redcap_event_name) ~ 1,
+                                     grepl(paste(c('pair_2','p2'), collapse = '|'), redcap_event_name) ~ 2)
+  )
+
+# Create LOCATION variable
+# ---indicates whether the data was collected in-office or via mobile survey
+data <- data %>%
+  mutate(location = case_when(grepl('visit' , redcap_event_name) ~ 'Visit',
+                              grepl('surv', redcap_event_name) ~ 'Survey')
+  )
+
+# Create WEEK variable
+# ---indicates the week in relation to lens dispense
+data <- data %>%
+  mutate(week = case_when(grepl('dispens', redcap_event_name) ~ '0',
+                          grepl('week_1',  redcap_event_name) ~ '1',
+                          grepl('week_2',  redcap_event_name) ~ '2',
+                          grepl('week_3',  redcap_event_name) ~ '3',
+                          grepl('week_4',  redcap_event_name) ~ '4')
+  )
+
+# Decode randomization schedule -- 2021-8-10 CV2109 scanned PDF. 
+# --- De-randomization done manually at this time. 
+# --- Variable 'lens_log_which_lens_[od/os]' only collected on Visits 3 and 6. 
+data <- data %>%
+  mutate(decoded_lens = ifelse(redcap_event_name == 'visit_0_screening_arm_1', 'Baseline',
+           
+                        ifelse(grepl('01RR',entry_subj_id) & randomized_pair == 1, 'Lens B', 
+                        ifelse(grepl('01RR',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                               
+                        ifelse(grepl('02JG',entry_subj_id) & randomized_pair == 1, 'Lens B', 
+                        ifelse(grepl('02JG',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                               
+                        ifelse(grepl('03MM',entry_subj_id) & randomized_pair == 1, 'Lens A',
+                        ifelse(grepl('03MM',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                               
+                        ifelse(grepl('04MB',entry_subj_id) & randomized_pair == 1, 'Lens A',
+                        ifelse(grepl('04MB',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                               
+                        ifelse(grepl('05AM',entry_subj_id) & randomized_pair == 1, 'Lens B',
+                        ifelse(grepl('05AM',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                               
+                      # ifelse(grepl('06PO',entry_subj_id) & randomized_pair == 1, 'Lens B',
+                      # ifelse(grepl('06PO',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                               
+                        ifelse(grepl('07CB',entry_subj_id) & randomized_pair == 1, 'Lens B',
+                        ifelse(grepl('07CB',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                               
+                        ifelse(grepl('08AG',entry_subj_id) & randomized_pair == 1, 'Lens B',
+                        ifelse(grepl('08AG',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                               
+                        ifelse(grepl('09LL',entry_subj_id) & randomized_pair == 1, 'Lens B',
+                        ifelse(grepl('09LL',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                               
+                        ifelse(grepl('10SC',entry_subj_id) & randomized_pair == 1, 'Lens A',
+                        ifelse(grepl('10SC',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                               
+                        ifelse(grepl('11VE',entry_subj_id) & randomized_pair == 1, 'Lens A',
+                        ifelse(grepl('11VE',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                               
+                        ifelse(grepl('12MC',entry_subj_id) & randomized_pair == 1, 'Lens A',
+                        ifelse(grepl('12MC',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                               NA)
+                        )))))))))))))))))))))))
+
+```
+
+```{r}
+#################################################################################################################
+###################################           DESCRIPTIVE ANALYSIS            ###################################
+#################################################################################################################
+```
+
+```{r}
+################      VISUAL ACUITY       ################
+data %>%
+  filter(location == 'Visit') %>%
+  ggplot(aes(x = entry_va_od, y = redcap_event_name.factor)) +
+  geom_boxplot() + 
+  labs(title = attr(data$entry_va_od, 'label'),
+       x = "",
+       y = attr(data$redcap_event_name, 'label')) +
+  theme_bw() + mytheme
+```
+
+```{r}
+entry_va_od <- count(data,entry_va_od)
+
+#Calculating the percentages and removing those who did not answer
+entry_va_od <- entry_va_od %>% 
+  filter(!is.na(entry_va_od)) %>% 
+  mutate(Percent = n/sum(n),
+         Percentage = percent(n/sum(n))) %>% 
+  rename(`Entry VA OD` = "entry_va_od")
+
+knitr::kable(entry_va_od %>% select(`Entry VA OD`,Percentage,n))
+```
+
+```{r}
+entry_va_od_2 <- as.data.frame(data %>% xtabs(formula = ~ entry_va_od + redcap_event_name))
+entry_va_od_2
+
+# Calculating the percentages and removing those who did not answer
+entry_va_od_2 <- entry_va_od_2 %>% 
+  filter(!is.na(entry_va_od_2)) %>% 
+  mutate(Percent = Freq/sum(Freq),
+         Percentage = percent(Freq/sum(Freq))) %>% 
+  rename(`Entry VA OD` = "entry_va_od") %>%
+  rename(`REDCap Event Name` = "redcap_event_name")
+
+knitr::kable(entry_va_od_2 %>% select(`REDCap Event Name`,`Entry VA OD`,Percentage,Freq,))
+  
+```
+
+```{r}
+#################################################################################################################
+###################################                CLDEQ-8                    ###################################
+#################################################################################################################
+```
+
+```{r}
+################      CLDEQ 1A) DISCOMFORT     ################
+
+data %>%
+  drop_na(week) %>% # Filter out Screening Visit
+  filter(week %in% c('0','2','4')) %>%
+  ggplot(aes(x = cldeq_1a_discomfort, fill= cldeq_1a_discomfort.factor)) +
+  geom_bar() +
+  facet_wrap(~week, labeller = label_both) +
+  scale_fill_manual(values=Palette_4) +
+  scale_y_continuous(breaks = pretty_breaks()) + # from {scales} package
+  xlab('Discomfort Rating') +
+  ggtitle(paste0(str_wrap(attr(data$cldeq_1a_discomfort, 'label'),53))) +
+  theme_bw() + mytheme_legend
+
+
+data %>%
+  drop_na(week) %>% # Filter out Screening Visit
+  filter(week %in% c('0','2','4'))
+```
+
+```{r}
+################      CLDEQ 1B) DISCOMFORT RATE     ################
+data %>%
+  drop_na(week) %>% # Filter out Screening Visit
+  ggplot(aes(x = week, y = cldeq_1b_discomfort_rate, fill = decoded_lens)) +
+  geom_boxplot() +
+  scale_x_discrete('Week', limits = c('0','2','4')) + 
+  scale_y_continuous('Discomfort', limits = c(0,5)) + 
+  ggtitle(paste0(str_wrap(attr(data$cldeq_1b_discomfort_rate, 'label'),62))) +
+  theme_bw() + mytheme_legend
+```
+```{r}
+################      CLDEQ 2) EYE DRYNESS RATE     ################
+################      CLDEQ 3) BLURRY VISION RATE     ################
+################      CLDEQ 4) CLOSING EYES     ################
+################      CLDEQ 5) REMOVING LENSES      ################
+```
+
+```{r}
+################      CLDEQ TOTAL CALCULATED SCORE      ################
+
+data %>%
+  filter(grepl(paste(c('visit_0','visit_3','visit_6'), collapse = '|'), redcap_event_name)) %>%
+  select(entry_subj_id, cldeq_score_calculated, decoded_lens) %>% 
+  spread(key = decoded_lens, value = cldeq_score_calculated, fill = 0) %>% # Replace fill = 0 with fill = NA when more data available.
+  select(c(entry_subj_id, `Lens A`, Baseline, `Lens B`)) %>% # Reorder for x-axis
+  ggparcoord(columns = 2:4, 
+             scale="globalminmax") +
+  xlab(element_blank()) +
+  ylab('CLDEQ-8 Score') + 
+  ggtitle(attr(data$cldeq_score_calculated, 'label')) +
+  theme_bw() + mytheme
+```
+
+```{r}
+#################################################################################################################
+###################################                LENS FIT                   ###################################
+#################################################################################################################
+
+################      POST-BLINK MOVEMENT OD      ################
+
+data %>%
+  filter(location == 'Visit') %>% # Lens Fit Assessments only done In-Office
+  ggplot(aes(x = redcap_event_name, y = lfa_post_blink_od, fill = decoded_lens)) +
+  geom_boxplot() +
+  scale_x_discrete('Visit', labels = c('0','1','2','3','4','5')) +
+  ylab('Movement (mm)') +
+  ggtitle(attr(data$lfa_post_blink_od, 'label')) +
+  theme_bw() + mytheme_legend 
+
+################      PRIMARY UPGAZE LAG      ################
+################      UPGAZE LENS LAG      ################
+################      PUSH-UP TEST      ################
+################      OVERALL LENS FIT      ################
+```
+
+```{r}
+#################################################################################################################
+###################################               WETTABILITY                 ###################################
+#################################################################################################################
+
+################      SURFACE WETTABILITY OS       ################
+data %>%
+  filter(location == 'Visit') %>%
+  ggplot(aes(x = surf_wettability_os, y = redcap_event_name.factor, fill = decoded_lens)) +
+  geom_boxplot() + 
+  labs(title = attr(data$surf_wettability_os, 'label'),
+       x = "Score",
+       y = element_blank()) +
+  scale_x_continuous(limits = c(0,4)) +
+  theme_bw() + mytheme_legend
+```
+
+```{r}
+#################################################################################################################
+###################################             Weekly Surveys                ###################################
+#################################################################################################################
+```
+
+```{r}
+################      REMOTE INSERTION: EASE      ################
+
+data %>%  
+  filter(location == 'Survey') %>%
+  filter(!is.na(week)) %>%
+  ggplot(aes(x = week, y = remote_insertion_ease, fill = decoded_lens, na.rm=T)) +
+  geom_boxplot() +
+  scale_y_continuous_100 +
+  labs(title = attr(data$remote_insertion_ease, 'label'),
+       x = 'Week',
+       y = 'Rating') +
+  theme_bw() + mytheme_legend
+```
+
+
+```{r}
+#################################################################################################################
+###################################             Ocular Health                 ###################################
+#################################################################################################################
+
+# Sum quadrants for baseline, test, control
+# Type, depth, and extent
+
+# Report type %
+# Report sum of extent and depth
+```
+
+
+
+
+
+
+
