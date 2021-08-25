@@ -7,15 +7,15 @@ INPUTS          :
 OUTPUTS         :  
 DATE CREATED    :  11 AUG 2021
 COMPLETED       :  No
-AUTHOR          :  MZ ( mizuidema at indiana dot edu ) 
+AUTHOR          :  MZ ( mizuidem at indiana dot edu ) 
  
 REVSIONS: 
 
 INITS           MOD_NUM     DATE              REASON
-   MZ           001         11-Aug-2021       Added blah blah
-                002                           Revised blah blah   
-   MZ           003         12-Aug-2021       Unified test/control color scheme
+   MZ           001         11-Aug-2021       First draft
+   MZ           002         16-Aug-2021       Initial commit
 ---
+
 
 
 ```{r}
@@ -24,14 +24,37 @@ INITS           MOD_NUM     DATE              REASON
 #################################################################################################################
 library(dplyr)
 library(tidyr)
+library(rmarkdown)
 library(scales)
 library(stringr)
 library(ggplot2)
 library(Hmisc)
-library(dplyr)
 library(GGally)
+library(rstudioapi)
+```
 
-# install.packages('Hmisc')
+```{r}
+#################################################################################################################
+####################################          .renv PROJECT STARTUP           ###################################
+#################################################################################################################
+
+# 1) Use renv::init() to initialize a project. renv will discover the R packages used 
+#    in your project, and install those packages into a private project library.
+
+# renv::init()
+
+# 2) Work in your project as usual, installing and upgrading R packages as required 
+#    as your project evolves.
+
+# 3) Use renv::snapshot() to save the state of your project library. The project 
+#    state will be serialized into a file called renv.lock.
+
+# renv::snapshot()
+
+# 4) Use renv::restore() to restore your project library from the state of your 
+#    previously-created lockfile renv.lock.
+
+#renv::restore()
 ```
 
 ```{r}
@@ -39,19 +62,19 @@ library(GGally)
 ###################################       READING IN DATA & VARIABLES         ###################################
 #################################################################################################################
 
-#Setting the working directory
-setwd("C:/Users/mzuid/OneDrive - Indiana University/CORL/Cooper/CV2109")
+# Setting the working directory
+setwd(dirname(getActiveDocumentContext()$path))
 
-#Reading in the raw data, labels, and factor levels 
-source("CV2109_R_2021-07-28_1048.r")
+# Reading in the raw data, labels, and factor levels 
+# source("CV2109_R_2021-07-28_1048.r")
 
-# source("CV2109_R_2021-08-11_1027.r")
+source("CV2109_R_2021-08-11_1027.r")
 
 ```
 
 ```{r}
 #################################################################################################################
-####################################             PLOT OBJECTS                ####################################
+####################################              PLOT OBJECTS               ###################################
 #################################################################################################################
 mytheme <-  theme(plot.title = element_text(size=16,face="bold",hjust=.5),
                   legend.title = element_blank(),
@@ -66,22 +89,54 @@ mytheme_legend <-  theme(plot.title = element_text(size=16,face="bold",hjust=.5)
                          axis.text = element_text(size=12,color="black"),
                          axis.title = element_text(size=12,face="bold"))
 
-#scale y continuous (%)
+# scale y continuous (%)
 scale_y_continuous_percentage100 <- scale_y_continuous(limits=c(0,1),name = "Percentage", breaks=c(0,.25,.5,.75,1),labels=c("0%","25%","50%","75%","100%"))
 
 scale_y_continuous_percentage110 <- scale_y_continuous(limits=c(0,1.1),name = "Percentage", breaks=c(0,.25,.5,.75,1),labels=c("0%","25%","50%","75%","100%"))
 
-#scale y continuous
+# scale y continuous
 scale_y_continuous_100 <- scale_y_continuous(limits=c(0,100), breaks=c(0,25,50,75,100),labels=c("0","25","50","75","100"))
 
 scale_y_continuous_110 <- scale_y_continuous(limits=c(0,110), breaks=c(0,25,50,75,100),labels=c("0","25","50","75","100"))
 
 
-#Color Palette
-Palette_2 <- c("#35A962", "#1d5290")
+# Color Palette
+Palette_2 <- c("#E69F00", "#56B4E9")
+Palette_3 <- c('#C0C0C0',"#E69F00", "#56B4E9")
 Palette_Agree <- c("#2f9657","#79B38F","#a9a9a9","#6D87A6","#1a4981")
 Palette_5 <- c("#a9a9a9","#2f9657","#79B38F","#6D87A6","#1a4981")
 Palette_4 <- c("#2f9657","#79B38F","#6D87A6","#1a4981")
+
+# Color-Blind Palette
+colorBlindGrey8   <- c("#C0C0C0", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# Check color palette
+scales::show_col(colorBlindGrey8)
+```
+
+```{r}
+#################################################################################################################
+###################################            DEFINE FUNCTIONS               ###################################
+#################################################################################################################
+
+# Set presets for ggsave() 
+# Work out exact specifications upon export..
+save_plot <- function(filename){
+  return(ggsave(
+    filename,
+    plot = last_plot(),
+    device = NULL,
+    path = NULL,
+    scale = 1,
+    width = NA,
+    height = NA,
+    units = c("in", "cm", "mm", "px"),
+    dpi = 300,
+    limitsize = TRUE,
+    bg = NULL
+    ))
+}
 ```
 
 ```{r}
@@ -89,18 +144,48 @@ Palette_4 <- c("#2f9657","#79B38F","#6D87A6","#1a4981")
 ###################################             CHECK DUPLICATES              ###################################
 #################################################################################################################
 
-# NEED MORE INFORMATION
+# # Make df copy to check duplicates  &  Remove entry_subj_id
+dup_test <- data %>% select(!1)
 
-dup_test <- data[,2:623]
+# Replace with substr of length 4 (i.e., removes _2 from ID's)
+dup_test$substr_entry_subj_id <- substr(data$entry_subj_id, 1, 4)
 
-dup_test$test_id <- substr(data$entry_subj_id, 0, 4)
+# Move ID to column 1 for easier inspection
+dup_test <- dup_test[,c(623,1:622)]
 
-duplicated(dup_test[c('test_id','redcap_event_name')])
+# Identify duplicates subjects and events 
+    # This is done because all events may not have duplicate entries to check for.
+dup_test <- dup_test %>% 
+  group_by(substr_entry_subj_id, redcap_event_name) %>% 
+  mutate(num_dups_id_event = n()) %>% 
+  ungroup()
+
+# Filter down to only rows which have duplicates (_02's)
+dup_test <- dup_test %>%
+  filter(num_dups_id_event == 2)
+
+# Check whether row is unique or a true duplicate (1 = unique, 2 = duplicate)
+dup_test %>% 
+  select(!hx_current_cl_brand) %>% #Tested removing text entries (sometimes have extra whitespace)
+  group_by_all() %>% 
+  mutate(num_dups_all = n()) %>% 
+  ungroup() %>%
+  select(1,2,624)
 ```
 
 ```{r}
 #################################################################################################################
 ####################################           CLEANING THE DATA              ###################################
+#################################################################################################################
+
+# Remove duplicate subjects
+data <- data %>%
+  filter(!(grepl('_2', entry_subj_id)))
+```
+
+```{r}
+#################################################################################################################
+####################################         CREATE NEW VARIABLES             ###################################
 #################################################################################################################
 
 # Create RANDOMIZED_PAIR variable
@@ -120,56 +205,65 @@ data <- data %>%
 # Create WEEK variable
 # ---indicates the week in relation to lens dispense
 data <- data %>%
-  mutate(week = case_when(grepl('dispens', redcap_event_name) ~ '0',
+  mutate(week = case_when(grepl('visit_0', redcap_event_name) ~ 'Baseline',
+                          grepl('dispens', redcap_event_name) ~ '0',
                           grepl('week_1',  redcap_event_name) ~ '1',
                           grepl('week_2',  redcap_event_name) ~ '2',
                           grepl('week_3',  redcap_event_name) ~ '3',
                           grepl('week_4',  redcap_event_name) ~ '4')
   )
+# Order factors for week
+data$week <- factor(data$week, levels = c('Baseline','0','1','2','3','4'))
 
 # Decode randomization schedule -- 2021-8-10 CV2109 scanned PDF. 
 # --- De-randomization done manually at this time. 
 # --- Variable 'lens_log_which_lens_[od/os]' only collected on Visits 3 and 6. 
+
+# Assign test/control 
+# ONLY PLACEHOLDER FOR NOW --- CHECK CRF FOR ASSIGNMENT
+Lens_A <- 'Control'
+Lens_B <- 'Test'
+
 data <- data %>%
   mutate(decoded_lens = ifelse(redcap_event_name == 'visit_0_screening_arm_1', 'Baseline',
-           
-                        ifelse(grepl('01RR',entry_subj_id) & randomized_pair == 1, 'Lens B', 
-                        ifelse(grepl('01RR',entry_subj_id) & randomized_pair == 2, 'Lens A',
+          
+                        ifelse(grepl('01RR',entry_subj_id) & randomized_pair == 1, Lens_B, 
+                        ifelse(grepl('01RR',entry_subj_id) & randomized_pair == 2, Lens_A,
                                
-                        ifelse(grepl('02JG',entry_subj_id) & randomized_pair == 1, 'Lens B', 
-                        ifelse(grepl('02JG',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                        ifelse(grepl('02JG',entry_subj_id) & randomized_pair == 1, Lens_B, 
+                        ifelse(grepl('02JG',entry_subj_id) & randomized_pair == 2, Lens_A,
                                
-                        ifelse(grepl('03MM',entry_subj_id) & randomized_pair == 1, 'Lens A',
-                        ifelse(grepl('03MM',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                        ifelse(grepl('03MM',entry_subj_id) & randomized_pair == 1, Lens_A,
+                        ifelse(grepl('03MM',entry_subj_id) & randomized_pair == 2, Lens_B,
                                
-                        ifelse(grepl('04MB',entry_subj_id) & randomized_pair == 1, 'Lens A',
-                        ifelse(grepl('04MB',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                        ifelse(grepl('04MB',entry_subj_id) & randomized_pair == 1, Lens_A,
+                        ifelse(grepl('04MB',entry_subj_id) & randomized_pair == 2, Lens_B,
                                
-                        ifelse(grepl('05AM',entry_subj_id) & randomized_pair == 1, 'Lens B',
-                        ifelse(grepl('05AM',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                        ifelse(grepl('05AM',entry_subj_id) & randomized_pair == 1, Lens_B,
+                        ifelse(grepl('05AM',entry_subj_id) & randomized_pair == 2, Lens_A,
                                
-                      # ifelse(grepl('06PO',entry_subj_id) & randomized_pair == 1, 'Lens B',
-                      # ifelse(grepl('06PO',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                      # ifelse(grepl('06PO',entry_subj_id) & randomized_pair == 1, Lens_B,
+                      # ifelse(grepl('06PO',entry_subj_id) & randomized_pair == 2, Lens_A,
                                
-                        ifelse(grepl('07CB',entry_subj_id) & randomized_pair == 1, 'Lens B',
-                        ifelse(grepl('07CB',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                        ifelse(grepl('07CB',entry_subj_id) & randomized_pair == 1, Lens_B,
+                        ifelse(grepl('07CB',entry_subj_id) & randomized_pair == 2, Lens_A,
                                
-                        ifelse(grepl('08AG',entry_subj_id) & randomized_pair == 1, 'Lens B',
-                        ifelse(grepl('08AG',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                        ifelse(grepl('08AG',entry_subj_id) & randomized_pair == 1, Lens_B,
+                        ifelse(grepl('08AG',entry_subj_id) & randomized_pair == 2, Lens_A,
                                
-                        ifelse(grepl('09LL',entry_subj_id) & randomized_pair == 1, 'Lens B',
-                        ifelse(grepl('09LL',entry_subj_id) & randomized_pair == 2, 'Lens A',
+                        ifelse(grepl('09LL',entry_subj_id) & randomized_pair == 1, Lens_B,
+                        ifelse(grepl('09LL',entry_subj_id) & randomized_pair == 2, Lens_A,
                                
-                        ifelse(grepl('10SC',entry_subj_id) & randomized_pair == 1, 'Lens A',
-                        ifelse(grepl('10SC',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                        ifelse(grepl('10SC',entry_subj_id) & randomized_pair == 1, Lens_A,
+                        ifelse(grepl('10SC',entry_subj_id) & randomized_pair == 2, Lens_B,
                                
-                        ifelse(grepl('11VE',entry_subj_id) & randomized_pair == 1, 'Lens A',
-                        ifelse(grepl('11VE',entry_subj_id) & randomized_pair == 2, 'Lens B',
+                        ifelse(grepl('11VE',entry_subj_id) & randomized_pair == 1, Lens_A,
+                        ifelse(grepl('11VE',entry_subj_id) & randomized_pair == 2, Lens_B,
                                
-                        ifelse(grepl('12MC',entry_subj_id) & randomized_pair == 1, 'Lens A',
-                        ifelse(grepl('12MC',entry_subj_id) & randomized_pair == 2, 'Lens B',
-                               NA)
-                        )))))))))))))))))))))))
+                        ifelse(grepl('12MC',entry_subj_id) & randomized_pair == 1, Lens_A,
+                        ifelse(grepl('12MC',entry_subj_id) & randomized_pair == 2, Lens_B,
+                               NA
+                        ))))))))))))))))))))))))
 
 ```
 
@@ -180,44 +274,113 @@ data <- data %>%
 ```
 
 ```{r}
-################      VISUAL ACUITY       ################
+################      SEX       ################
+
+# hx_sex
+# Only taken during visit 0 (History instrument)
+
 data %>%
-  filter(location == 'Visit') %>%
-  ggplot(aes(x = entry_va_od, y = redcap_event_name.factor)) +
-  geom_boxplot() + 
-  labs(title = attr(data$entry_va_od, 'label'),
-       x = "",
-       y = attr(data$redcap_event_name, 'label')) +
-  theme_bw() + mytheme
-```
-
-```{r}
-entry_va_od <- count(data,entry_va_od)
-
-#Calculating the percentages and removing those who did not answer
-entry_va_od <- entry_va_od %>% 
-  filter(!is.na(entry_va_od)) %>% 
+  select(1,2,hx_sex) %>%
+  filter(redcap_event_name == 'visit_0_screening_arm_1') %>%
+  count(hx_sex) %>% 
   mutate(Percent = n/sum(n),
-         Percentage = percent(n/sum(n))) %>% 
-  rename(`Entry VA OD` = "entry_va_od")
-
-knitr::kable(entry_va_od %>% select(`Entry VA OD`,Percentage,n))
+         Percentage = percent(n/sum(n))
+         )
 ```
 
 ```{r}
-entry_va_od_2 <- as.data.frame(data %>% xtabs(formula = ~ entry_va_od + redcap_event_name))
-entry_va_od_2
+################      AUTO-REFRACTION       ################
 
-# Calculating the percentages and removing those who did not answer
-entry_va_od_2 <- entry_va_od_2 %>% 
-  filter(!is.na(entry_va_od_2)) %>% 
-  mutate(Percent = Freq/sum(Freq),
-         Percentage = percent(Freq/sum(Freq))) %>% 
-  rename(`Entry VA OD` = "entry_va_od") %>%
-  rename(`REDCap Event Name` = "redcap_event_name")
+# autoref_sph_od, autoref_cyl_od, autoref_axis_od
+# Only taken during visit 0 (History instrument)
 
-knitr::kable(entry_va_od_2 %>% select(`REDCap Event Name`,`Entry VA OD`,Percentage,Freq,))
-  
+data %>%
+  select(1,2,(starts_with('autoref') & (ends_with('_od')))) %>% # Only OD
+  filter(redcap_event_name == 'visit_0_screening_arm_1') %>%
+  select(c(autoref_sph_od, autoref_cyl_od, autoref_axis_od)) %>%
+  gather(key = 'Loc', value = 'Measure') %>%
+  group_by(Loc) %>%
+  summarise(mean = mean(Measure),
+            SD = sd(Measure),
+            max = max(Measure),
+            min = min(Measure)
+            )
+```
+
+```{r}
+################      KERATOMETRY       ################
+
+# keratometry_flat_od, keratometry_flataxis_od, keratometry_steep_od, keratometry_steepaxis_od
+# Only taken during visit 0 (History instrument)
+
+data %>%
+  select(1,2,(starts_with('kerat')  & ends_with('_od'))) %>% # Only OD
+  filter(redcap_event_name == 'visit_0_screening_arm_1') %>%
+  select(c(keratometry_flat_od, keratometry_flataxis_od, keratometry_steep_od, keratometry_steepaxis_od)) %>%
+  gather(key = 'Loc', value = 'Measure') %>%
+  group_by(Loc) %>%
+  summarise(mean = mean(Measure),
+            SD = sd(Measure),
+            max = max(Measure),
+            min = min(Measure)
+            )
+```
+
+```{r}
+################      HABITUAL RX       ################
+
+# hab_sph_od, hab_cyl_od, hab_axis_od
+# Only taken during visit 0 (History instrument)
+
+data %>%
+  select(1,2,(starts_with('hab')  & ends_with('_od'))) %>% # Only OD
+  filter(redcap_event_name == 'visit_0_screening_arm_1') %>%
+  select(c(hab_sph_od, hab_cyl_od, hab_axis_od)) %>%
+  gather(key = 'Loc', value = 'Measure') %>%
+  group_by(Loc) %>%
+  summarise(mean = mean(Measure),
+            SD = sd(Measure),
+            max = max(Measure),
+            min = min(Measure)
+            )
+```
+
+```{r}
+################      HABITUAL SNELLEN VA       ################
+
+# hab_sph_va_od, hab_sph_va_od_mod
+# Only taken during visit 0 (History instrument)
+
+data %>%
+  select(1,2,(starts_with('hab')  & contains('va_od'))) %>% # Only OD
+  filter(redcap_event_name == 'visit_0_screening_arm_1') %>%
+  select(c(hab_sph_va_od, hab_sph_va_od_mod)) %>%
+  gather(key = 'Loc', value = 'Measure') %>%
+  group_by(Loc) %>%
+  summarise(mean = mean(Measure),
+            SD = sd(Measure),
+            max = max(Measure),
+            min = min(Measure)
+            )
+```
+
+```{r}
+################      DISTANCE MONOCULAR SPHERO-CYLINDER REF OR DISTANCE SNELLEN       ################
+
+# overref_rx_sphod, overref_rx_cyl_od, overref_rx_axis_od, overref_va_od, overref_va_mod_od
+# Only taken during visit 0 (History instrument)
+
+data %>%
+  select(1,2,(starts_with('overref')  & ends_with('od'))) %>% # Only OD
+  filter(redcap_event_name == 'visit_0_screening_arm_1') %>%
+  select(c(overref_rx_sphod, overref_rx_cyl_od, overref_rx_axis_od, overref_va_od, overref_va_mod_od)) %>%
+  gather(key = 'Loc', value = 'Measure') %>%
+  group_by(Loc) %>%
+  summarise(mean = mean(Measure),
+            SD = sd(Measure),
+            max = max(Measure),
+            min = min(Measure)
+            )
 ```
 
 ```{r}
@@ -228,23 +391,112 @@ knitr::kable(entry_va_od_2 %>% select(`REDCap Event Name`,`Entry VA OD`,Percenta
 
 ```{r}
 ################      CLDEQ 1A) DISCOMFORT     ################
-
 data %>%
-  drop_na(week) %>% # Filter out Screening Visit
+  filter(location == 'Visit') %>%
   filter(week %in% c('0','2','4')) %>%
-  ggplot(aes(x = cldeq_1a_discomfort, fill= cldeq_1a_discomfort.factor)) +
-  geom_bar() +
-  facet_wrap(~week, labeller = label_both) +
-  scale_fill_manual(values=Palette_4) +
+  ggplot(aes(x = cldeq_1a_discomfort.factor, fill= decoded_lens)) +
+  geom_bar(position = position_dodge2(preserve = "single"), color = 'black') +
+  facet_wrap(~week, labeller = labeller(week = c('0' = 'Dispense',
+                                                 '2' = 'Week 2',
+                                                 '4' = 'Week 4'))) +
+  scale_fill_manual(values=Palette_2) +
   scale_y_continuous(breaks = pretty_breaks()) + # from {scales} package
-  xlab('Discomfort Rating') +
+  scale_x_discrete(element_blank(), drop = F) + # drop = F to maintain factor levels with no data
   ggtitle(paste0(str_wrap(attr(data$cldeq_1a_discomfort, 'label'),53))) +
-  theme_bw() + mytheme_legend
+  theme_bw() + mytheme_legend +
+  coord_flip()
 
 
+# Main Comparison: Control vs. Test Lens ... over time (Visit 1-3 vs. 4-6)
+#•	Y: Count
+#•	X: Categorical (values: "0 - Never","1 - Rarely","2 - Sometimes","3 - Frequently","4 - Constantly") Likert --- cldeq_1a_discomfort
+#•	FILL = Categorical (values: 'Control','Test') --- decoded_lens
+
+
+###### WITH BASELINE
 data %>%
-  drop_na(week) %>% # Filter out Screening Visit
-  filter(week %in% c('0','2','4'))
+  filter(location == 'Visit') %>%
+  ggplot(aes(x = cldeq_1a_discomfort.factor, fill= decoded_lens)) +
+  geom_bar(position = position_dodge2(preserve = "single"), color = 'black') +
+  facet_wrap(~week, labeller = labeller(week = c('Baseline' = 'Baseline',
+                                                 '0' = 'Dispense',
+                                                 '2' = 'Week 2',
+                                                 '4' = 'Week 4'))) +
+  scale_fill_manual(values=Palette_3) +
+  scale_y_continuous('Number of Subjects',breaks = pretty_breaks()) + # from {scales} package
+  scale_x_discrete(element_blank(), drop = F) + # drop = F to maintain factor levels with no data
+  ggtitle(paste0(str_wrap(attr(data$cldeq_1a_discomfort, 'label'),53))) +
+  theme_bw() + mytheme_legend +
+  coord_flip()
+```
+
+```{r}
+# TEST BLOCK N ONLY
+
+###### WITH BASELINE
+data %>%
+  filter(location == 'Visit') %>%
+  ggplot(aes(x = cldeq_1a_discomfort, y = ..prop.., fill= decoded_lens)) +
+  geom_bar(position = position_dodge2(preserve = "single"), color = 'black') +
+  geom_text(stat='count', aes(label=..count..), position = position_dodge(width=1), hjust = -0.25, vjust=0.4, size = 3.25) +
+  facet_wrap(~week, labeller = labeller(week = c('Baseline' = 'Baseline',
+                                                 '0' = 'Dispense',
+                                                 '2' = 'Week 2',
+                                                 '4' = 'Week 4'))) +
+  scale_fill_manual(values=Palette_3) +
+  scale_y_continuous('Percent', labels = scales::percent_format()) + # from {scales} package
+  scale_x_discrete(element_blank(), drop = F) + # drop = F to maintain factor levels with no data
+  ggtitle(paste0(str_wrap(attr(data$cldeq_1a_discomfort, 'label'),53))) +
+  theme_bw() + mytheme_legend +
+  coord_flip()
+```
+
+```{r}
+# TEST BLOCK % ONLY
+
+###### WITH BASELINE
+data %>%
+  filter(location == 'Visit') %>%
+  ggplot(aes(x = cldeq_1a_discomfort, y = ..prop.., fill= decoded_lens)) +
+  geom_bar(position = position_dodge2(preserve = "single"), color = 'black') +
+  geom_text(aes(label = paste0(round(..prop.., digits = 2)*100,'%'), y= ..prop..), 
+            stat= "count", 
+            position = position_dodge(width=1), hjust = -0.1, vjust=0.4, size = 3.25) +
+  facet_wrap(~week, labeller = labeller(week = c('Baseline' = 'Baseline',
+                                                 '0' = 'Dispense',
+                                                 '2' = 'Week 2',
+                                                 '4' = 'Week 4'))) +
+  scale_fill_manual(values=Palette_3) +
+  scale_y_continuous('Percent', labels = scales::percent_format(), limits = c(0,.75)) + # from {scales} package
+  scale_x_discrete(element_blank(), drop = F) + # drop = F to maintain factor levels with no data
+  ggtitle(paste0(str_wrap(attr(data$cldeq_1a_discomfort, 'label'),53))) +
+  theme_bw() + mytheme_legend +
+  coord_flip()
+```
+
+```{r}
+# TEST BLOCK % (N)
+
+###### WITH BASELINE
+data %>%
+  filter(location == 'Visit') %>%
+  ggplot(aes(x = cldeq_1a_discomfort, y = ..prop.., fill= decoded_lens)) +
+  geom_bar(position = position_dodge2(preserve = "single"), color = 'black') +
+  geom_text(aes(label = paste0(round(..prop.., digits = 2)*100,'% (',..count..,')'), y= ..prop..), 
+            stat= "count", 
+            position = position_dodge(width=1), hjust = -0.1, vjust=0.4, size = 3.25) +
+  facet_wrap(~week, labeller = labeller(week = c('Baseline' = 'Habitual',
+                                                 '0' = 'Dispense',
+                                                 '2' = 'Week 2',
+                                                 '4' = 'Week 4'))) +
+  scale_fill_manual(values=Palette_3) +
+  scale_y_continuous('Percent', labels = scales::percent_format(), limits = c(0,.8)) + # from {scales} package
+  scale_x_discrete(element_blank(), limits = 0:4,
+                   labels = c('Never','Rarely','Sometimes','Frequently','Constantly'),
+                   drop = F) + # drop = F to maintain factor levels with no data
+  ggtitle(paste0(str_wrap(attr(data$cldeq_1a_discomfort, 'label'),53))) +
+  theme_bw() + mytheme_legend +
+  coord_flip()
 ```
 
 ```{r}
@@ -253,16 +505,48 @@ data %>%
   drop_na(week) %>% # Filter out Screening Visit
   ggplot(aes(x = week, y = cldeq_1b_discomfort_rate, fill = decoded_lens)) +
   geom_boxplot() +
+  scale_fill_manual(values=Palette_2) +
   scale_x_discrete('Week', limits = c('0','2','4')) + 
   scale_y_continuous('Discomfort', limits = c(0,5)) + 
   ggtitle(paste0(str_wrap(attr(data$cldeq_1b_discomfort_rate, 'label'),62))) +
   theme_bw() + mytheme_legend
+
+####################################################################
+
+# CLDEQ GRAPHICS FUNCTION
+
+cldeq_cont_by_week <- function(var1, title){
+data %>%
+  drop_na(week) %>% # Filter out Screening Visit
+  ggplot(aes(x = week, y = {{ var1 }}, fill = decoded_lens)) +
+  geom_boxplot() +
+  scale_fill_manual(values=Palette_2) +
+  scale_x_discrete('Week', limits = c('0','2','4')) + 
+  scale_y_continuous('Discomfort', limits = c(0,5)) + 
+  ggtitle(title) +
+  theme_bw() + mytheme_legend
+}
+
+cldeq_cont_by_week(cldeq_1b_discomfort_rate, 'Discomfort Rate')
 ```
+
 ```{r}
 ################      CLDEQ 2) EYE DRYNESS RATE     ################
+
+cldeq_cont_by_week()
+
 ################      CLDEQ 3) BLURRY VISION RATE     ################
+
+cldeq_cont_by_week()
+
 ################      CLDEQ 4) CLOSING EYES     ################
+
+cldeq_cont_by_week()
+
 ################      CLDEQ 5) REMOVING LENSES      ################
+
+cldeq_cont_by_week()
+
 ```
 
 ```{r}
@@ -272,7 +556,7 @@ data %>%
   filter(grepl(paste(c('visit_0','visit_3','visit_6'), collapse = '|'), redcap_event_name)) %>%
   select(entry_subj_id, cldeq_score_calculated, decoded_lens) %>% 
   spread(key = decoded_lens, value = cldeq_score_calculated, fill = 0) %>% # Replace fill = 0 with fill = NA when more data available.
-  select(c(entry_subj_id, `Lens A`, Baseline, `Lens B`)) %>% # Reorder for x-axis
+  select(c(entry_subj_id, `Control`, Baseline, `Test`)) %>% # Reorder for x-axis
   ggparcoord(columns = 2:4, 
              scale="globalminmax") +
   xlab(element_blank()) +
@@ -290,17 +574,98 @@ data %>%
 
 data %>%
   filter(location == 'Visit') %>% # Lens Fit Assessments only done In-Office
-  ggplot(aes(x = redcap_event_name, y = lfa_post_blink_od, fill = decoded_lens)) +
+  ggplot(aes(x = week, y = lfa_post_blink_od, fill = decoded_lens)) +
   geom_boxplot() +
-  scale_x_discrete('Visit', labels = c('0','1','2','3','4','5')) +
-  ylab('Movement (mm)') +
+  # Add dotplots over boxplots 
+  geom_point(pch = 21, # pcd = 21 creates circles filled with appropriate fill colors
+             position = position_jitterdodge(jitter.width = 0.1)) + # Jitter & dodge subject points
+  # Add mean to grouped boxplots
+  stat_summary(fun.y=mean, geom="point", shape=18, size=3, color="red",
+               position = position_dodge2(width = 0.75,
+                                          preserve = "single")) +
+  geom_vline(xintercept = 1.5, linetype = 'solid') +
+  scale_y_continuous('Movement (mm)', breaks = pretty_breaks()) +
+  scale_x_discrete('Week') +
+  scale_fill_manual(values=Palette_3) +
   ggtitle(attr(data$lfa_post_blink_od, 'label')) +
-  theme_bw() + mytheme_legend 
+  theme_bw() + mytheme_legend
+
+# LFA GRAPHICS FUNCTION
+
+lfa_cont_by_week <- function(var1, title){
+data %>%
+  filter(location == 'Visit') %>% # Lens Fit Assessments only done In-Office
+  ggplot(aes(x = week, y = {{ var1 }}, fill = decoded_lens)) +
+  geom_boxplot() +
+  # Add dotplots over boxplots 
+  geom_point(pch = 21, # pcd = 21 creates circles filled with appropriate fill colors
+             position = position_jitterdodge(jitter.width = 0.1)) + # Jitter & dodge subject points
+  # Add mean to grouped boxplots
+  stat_summary(fun.y=mean, geom="point", shape=18, size=3, color="red",
+               position = position_dodge2(width = 0.75,
+                                          preserve = "single")) +
+  geom_vline(xintercept = 1.5, linetype = 'solid') +
+  scale_y_continuous('Movement (mm)', breaks = pretty_breaks()) +
+  scale_x_discrete('Week') +
+  scale_fill_manual(values=Palette_3) +
+  ggtitle(title) +
+  theme_bw() + mytheme_legend
+}
+
+lfa_cont_by_week(lfa_post_blink_od, 'Post Blink OD')
+
+# Main Comparison: Control vs. Test Lens vs. Baseline ... over time (Visit 0 vs. 1-3 vs. 4-6)
+#•	Y: Continuous (range: inf.; 0.1mm steps ) --- lfa_post_blink_od
+#•	X: Categorical (coded as string; values: '0','2','4') factor --- week
+#•	FILL = Categorical (values: 'Control','Test') --- decoded_lens
+
+
 
 ################      PRIMARY UPGAZE LAG      ################
+
+# Main Comparison: Control vs. Test Lens vs. Baseline ... over time (Visit 0 vs. 1-3 vs. 4-6)
+#•	Y: Continuous (range: inf.; 0.1mm steps ) --- lfa_primary_od
+#•	X: Categorical (coded as string; values: '0','2','4') factor --- week
+#•	FILL = Categorical (values: 'Control','Test') --- decoded_lens
+
 ################      UPGAZE LENS LAG      ################
+
+# Main Comparison: Control vs. Test Lens vs. Baseline ... over time (Visit 0 vs. 1-3 vs. 4-6)
+#•	Y: Continuous (range: inf.; 0.1mm steps ) --- lfa_upgaze_od
+#•	X: Categorical (coded as string; values: '0','2','4') factor --- week
+#•	FILL = Categorical (values: 'Control','Test') --- decoded_lens
+
 ################      PUSH-UP TEST      ################
+
+data %>%
+  filter(location == 'Visit') %>% # Lens Fit Assessments only done In-Office
+  ggplot(aes(x = week, y = (lfa_pushup_od/100), fill = decoded_lens)) +
+  geom_boxplot() +
+  # Add dotplots over boxplots 
+  geom_point(pch = 21, # pcd = 21 creates circles filled with appropriate fill colors
+             position = position_jitterdodge(jitter.width = 0.1)) + # Jitter & dodge subject points
+  # Add mean to grouped boxplots
+  stat_summary(fun.y=mean, geom="point", shape=18, size=3, color="red",
+               position = position_dodge2(width = 0.75,
+                                          preserve = "single")) +
+  geom_vline(xintercept = 1.5, linetype = 'solid') +
+  scale_y_continuous('Percent', labels = scales::percent_format(), limits = c(0,1)) +
+  scale_x_discrete('Week') +
+  scale_fill_manual(values=Palette_3) +
+  ggtitle(attr(data$lfa_pushup_od, 'label')) +
+  theme_bw() + mytheme_legend
+
+# Main Comparison: Control vs. Test Lens vs. Baseline ... over time (Visit 0 vs. 1-3 vs. 4-6)
+#•	Y: Continuous (range: 0-100%) --- lfa_pushup_od
+#•	X: Categorical (coded as string; values: '0','2','4') factor --- week
+#•	FILL = Categorical (values: 'Control','Test') --- decoded_lens
+
 ################      OVERALL LENS FIT      ################
+
+# Main Comparison: Control vs. Test Lens vs. Baseline ... over time (Visit 0 vs. 1-3 vs. 4-6)
+#•	Y: Continuous (range: 0-5?) --- lfa_lens_accept_od
+#•	X: Categorical (coded as string; values: '0','2','4') factor --- week
+#•	FILL = Categorical (values: 'Control','Test') --- decoded_lens
 ```
 
 ```{r}
@@ -310,15 +675,31 @@ data %>%
 
 ################      SURFACE WETTABILITY OS       ################
 data %>%
+  filter(!is.na(week)) %>%
+  filter(week != 'Baseline') %>% # Baseline data not collected for wettability 
   filter(location == 'Visit') %>%
-  ggplot(aes(x = surf_wettability_os, y = redcap_event_name.factor, fill = decoded_lens)) +
-  geom_boxplot() + 
-  labs(title = attr(data$surf_wettability_os, 'label'),
-       x = "Score",
-       y = element_blank()) +
-  scale_x_continuous(limits = c(0,4)) +
+  ggplot(aes(x = week, y = surf_wettability_od, fill = decoded_lens)) +
+  geom_boxplot() +
+  # Add dotplots over boxplots 
+  geom_point(pch = 21, # pcd = 21 creates circles filled with appropriate fill colors
+             position = position_jitterdodge(jitter.width = 0.1)) + # Jitter & dodge subject points
+  # Add mean to grouped boxplots
+  stat_summary(fun.y=mean, geom="point", shape=20, size=3, color="red",
+               position = position_dodge2(width = 0.75,
+                                          preserve = "single")) +
+  scale_y_continuous('Score', breaks = pretty_breaks(), limits = c(0,4)) +
+  scale_x_discrete('Week', breaks = pretty_breaks()) +
+  scale_fill_manual(values=Palette_2) +
+  ggtitle(attr(data$surf_wettability_od, 'label')) +
   theme_bw() + mytheme_legend
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-4; 0=nonwetting, 4=excellent)         --- surf_wettability_od
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
 ```
+
 
 ```{r}
 #################################################################################################################
@@ -338,9 +719,137 @@ data %>%
   labs(title = attr(data$remote_insertion_ease, 'label'),
        x = 'Week',
        y = 'Rating') +
+  scale_fill_manual(values=Palette_2) +
   theme_bw() + mytheme_legend
+
+##################################################################
+
+remote_cont_cat <- function(var1, title){
+  data %>%  
+  filter(location == 'Survey') %>%
+  filter(!is.na(week)) %>%
+  ggplot(aes(x = week, y = {{var1}}, fill = decoded_lens, na.rm=T)) +
+  geom_boxplot() +
+  scale_y_continuous_100 +
+  labs(title = title,
+       x = 'Week',
+       y = 'Rating') +
+  scale_fill_manual(values=Palette_2) +
+  theme_bw() + mytheme_legend
+}
+
+remote_cont_cat(remote_insertion_ease,
+                "Ease of Insertion Rating")
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_insertion_ease
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+
+################      REMOTE INSERTION: COMFORT     ################
+
+remote_cont_cat(remote_insertion_comf,
+                "Insertion Comfort Rating")
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_insertion_comf
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+################      REMOTE INSERTION: DRYNESS     ################
+
+remote_cont_cat(remote_insertion_dry,
+                "Insertion Dryness Rating")
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_insertion_dry
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+################      REMOTE INSERTION: AWARENESS     ################
+
+remote_cont_cat(remote_insertion_awareness,
+                "Insertion Awareness Rating")
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_insertion_awareness
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+################      REMOTE INSERTION: VISION RATING      ################
+
+remote_cont_cat(remote_insertion_quality,
+                "Insertion Quality Rating")
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_insertion_quality
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
 ```
 
+```{r}
+################      REMOTE REMOVAL: HOW MANY HOURS      ################
+
+data %>%
+  filter(location == 'Survey') %>%
+  filter(!is.na(week)) %>% # Exclude survey setup 
+  ggplot(aes(x = week, y = remote_removal_hours, fill = decoded_lens, na.rm=T)) +
+  geom_boxplot() +
+  scale_y_continuous('Hours', breaks = c(0,4,8,12,16,20,24), limits = c(0,24)) +
+  labs(title = paste0(str_wrap(attr(data$remote_removal_hours, 'label'),55)),
+       x = 'Week',
+       y = 'Rating') +
+  scale_fill_manual(values=Palette_2) +
+  theme_bw() + mytheme_legend
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-24)                                   --- remote_removal_hours
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+################      REMOTE REMOVAL: COMFORT     ################
+
+data %>%  
+  filter(location == 'Survey') %>%
+  filter(!is.na(week)) %>%
+  ggplot(aes(x = week, y = remote_removal_comf, fill = decoded_lens, na.rm=T)) +
+  geom_boxplot() +
+  scale_y_continuous_100 +
+  labs(title = attr(data$remote_removal_comf, 'label'),
+       x = 'Week',
+       y = 'Rating') +
+  scale_fill_manual(values=Palette_2) +
+  theme_bw() + mytheme_legend
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_removal_comf
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+################      REMOTE REMOVAL: DRYNESS     ################
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_removal_dry
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+################      REMOTE REMOVAL: AWARENESS     ################
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_removal_awareness
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+################      REMOTE REMOVAL: VISION RATING      ################
+
+# Main Comparison: Control vs. Test lens over time (Visit 1-3 or 4-6)
+# Y: Continuous (range: 0-100)                                  --- remote_removal_quality
+# X: Categorical (coded as string; values: '0','2','4') ordinal --- week
+# FILL = Categorical (values: 'Control','Test')                 --- decoded_lens
+
+```
 
 ```{r}
 #################################################################################################################
